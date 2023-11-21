@@ -1,35 +1,47 @@
-import RPi.GPIO as GPIO​
-import time​
+from picamera2 import Picamera2, Preview
+import time
+from datetime import datetime
+import RPi.GPIO as GPIO
 
-inpin=23​
+pirDataPin=23
+ledPin=24
 
-startupWaitTimeInSeconds=2​
-motionResetTimeOutInSeconds=1​
-mainLoopDelayTimeInSeconds=0.1​
+GPIO.setmode(GPIO.BCM)
+GPIO.setup(pirDataPin, GPIO.IN, pull_up_down=GPIO.PUD_DOWN)
+GPIO.setup(ledPin, GPIO.OUT)
 
-motionActivatedCounter=0​
+picam = Picamera2()
+config = picam.create_still_configuration(main={"size": (1152, 648)})
+picam.configure(config)
+picam.start_preview(Preview.NULL)
+picam.start()
 
-GPIO.setmode(GPIO.BCM)​
-GPIO.setup(inpin, GPIO.IN)​
+print("waiting for camera and PIR to warm")
+startupLoop = 0
+while startupLoop < 10:
+	startupLoop = startupLoop + 1
+	print(10-startupLoop)
+	GPIO.output(ledPin, True)
+	time.sleep(0.5)
+	GPIO.output(ledPin, False)
+	time.sleep(0.5)
 
-print("Using GPIO Pin", inpin, "as input for high/low signal.")​
-print("Motion timeout reset is", motionResetTimeOutInSeconds, "seconds")​
+print("ready")
 
-try: #attempt this code, in a safe (ish) manor​
-        time.sleep(startupWaitTimeInSeconds) #Give the sensor time to startup​
-        print("Startup complete. Listening for signal on pin", inpin)​\
-
-        while True: #continually loop until cancelled​
-                if GPIO.input(inpin): #Pin 23 will be set high (digital 1 or True) when PIR detects motion​
-                        motionActivatedCounter+=1​
-                        print("Motion detected! (", motionActivatedCounter, ")")​
-                        print("Motion cooldown, active in", motionResetTimeOutInSeconds, "second(s)")​
-                        time.sleep(motionResetTimeOutInSeconds) #Allow the sensor to reset from true (only if true)​
-                        print("Watching......")​
-                        print("")​
-
-        time.sleep(mainLoopDelayTimeInSeconds) #give the loop a small delay.  ​
-
-except:​
-        print("Exit or Error, performing clean up and exiting")​
-        GPIO.cleanup() #If error, clean up and exit​
+while True:
+	try:
+		if GPIO.input(pirDataPin):
+			filename = str(datetime.now()) + ".jpg"
+			print("snap " + filename)
+			picam.capture_file("snaps/" + filename)
+			GPIO.output(ledPin, True)
+			time.sleep(10)
+			GPIO.output(ledPin, False)
+		else:
+			GPIO.output(ledPin, False)
+			#print("all quiet.  waiting")
+			time.sleep(0.5)
+	except:
+		picam.stop()
+		picam.close()
+		GPIO.cleanup()
